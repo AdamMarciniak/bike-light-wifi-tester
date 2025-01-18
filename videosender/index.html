@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Frame Processor with Audio</title>
+    <style>
+      /* Previous styles remain the same */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        padding: 2rem;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+
+      .drop-zone.dragging {
+        border-color: #3b82f6;
+        background-color: #eff6ff;
+      }
+
+      .drop-zone.has-file {
+        border-color: #22c55e;
+        background-color: #f0fdf4;
+      }
+
+      .upload-icon {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 1rem;
+        color: #9ca3af;
+      }
+
+      .drop-zone.dragging .upload-icon {
+        color: #3b82f6;
+      }
+
+      .drop-zone.has-file .upload-icon {
+        color: #22c55e;
+      }
+
+      .video-container {
+        margin-bottom: 1rem;
+      }
+
+      video {
+        width: 100%;
+        border-radius: 8px;
+      }
+
+      .button-group {
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 1rem;
+      }
+
+      button {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s ease;
+      }
+
+      button:disabled {
+        background-color: #d1d5db;
+        cursor: not-allowed;
+      }
+
+      .start-button {
+        background-color: #3b82f6;
+        color: white;
+      }
+
+      .start-button:not(:disabled):hover {
+        background-color: #2563eb;
+      }
+
+      .stop-button {
+        background-color: #ef4444;
+        color: white;
+      }
+
+      .stop-button:not(:disabled):hover {
+        background-color: #dc2626;
+      }
+
+      .status {
+        font-size: 0.875rem;
+        color: #4b5563;
+        margin-bottom: 1rem;
+      }
+
+      .frame-display {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 1rem;
+        background-color: #f9fafb;
+      }
+
+      .frame-display h2 {
+        font-size: 1.125rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .frame-display img {
+        width: 100%;
+        border-radius: 8px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .loop-count {
+        font-weight: bold;
+        color: #3b82f6;
+      }
+
+      /* New audio controls styles */
+      .audio-controls {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .volume-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .volume-slider {
+        width: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Video Frame Processor with Audio</h1>
+
+    <div class="drop-zone" id="dropZone">
+      <svg
+        class="upload-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
+        />
+      </svg>
+      <p>Drag and drop your video file here</p>
+      <p style="font-size: 0.875rem; color: #6b7280">
+        or click to select a file
+      </p>
+    </div>
+
+    <div class="video-container hidden" id="videoContainer">
+      <video id="video" crossorigin="anonymous"></video>
+      <canvas id="canvas" class="hidden"></canvas>
+
+      <!-- New audio controls -->
+      <div class="audio-controls">
+        <div class="volume-control">
+          <label for="volume">Volume:</label>
+          <input
+            type="range"
+            id="volume"
+            class="volume-slider"
+            min="0"
+            max="1"
+            step="0.1"
+            value="1"
+          />
+        </div>
+        <button id="muteButton">🔊</button>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="start-button" id="startButton" disabled>
+        Start Processing
+      </button>
+      <button class="stop-button" id="stopButton" disabled>
+        Stop Processing
+      </button>
+    </div>
+
+    <input
+      type="range"
+      id="gamma"
+      class="volume-slider"
+      min="0"
+      max="5"
+      step="0.1"
+      value="2.8"
+    />
+
+    <div class="status" id="status">
+      <p>Current Time: <span id="currentTime">0.00</span>s</p>
+      <p>Status: <span id="statusText">Waiting for video...</span></p>
+      <p>Loop Count: <span id="loopCount" class="loop-count">0</span></p>
+    </div>
+
+    <div class="frame-display hidden" id="frameDisplay">
+      <h2>Latest Extracted Frame</h2>
+      <img id="frameImage" alt="Extracted frame" />
+    </div>
+
+    <canvas id="canvas2" width="800" height="500"></canvas>
+    <canvas id="pixelcanvas" width="800" height="500"></canvas>
+
+    <script>
+      let apiBusy = false;
+      // Previous processImage function remains the same
+      const simulateProcessing = async (ms) => {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      };
+
+      //     float gamma   = 2.8; // Correction factor
+      //  max_in  = 255, // Top end of INPUT range
+      //     max_out = 255; // Top end of OUTPUT range
+
+      // for(int i=0; i<=max_in; i++) {
+      //   if(i > 0) print(',');
+      //   if((i & 15) == 0) print("\n  ");
+      //   System.out.format("%3d",
+      //     (int)(pow((float)i / (float)max_in, gamma) * max_out + 0.5));
+      // }
+
+      // Default gamma 2.8 is good
+      const gamma = 2.8;
+      const maxIn = 255;
+      const maxOut = 255;
+      const gammaCorrect = (input, g) =>
+        Math.floor(Math.pow(input / maxIn, g) * maxOut);
+
+      const canvas = document.getElementById("pixelcanvas");
+      const ctx = canvas.getContext("2d");
+      const canvas2 = document.getElementById("canvas2");
+      const ctx2 = canvas2.getContext("2d", [{ willReadFrequently: true }]);
+      const width = 800;
+      const height = 500;
+      const xCenter = width / 2;
+      const yCenter = height / 2;
+      const ledSize = 2;
+      const numLED = 42;
+      const ledMaxRadius = 200;
+      const ledMinRadius = ledMaxRadius / 3.83;
+      const distBetweenLeds = (ledMaxRadius - ledMinRadius) / numLED;
+      const refreshRateAngle = 1;
+      async function processImage(img, gamma) {
+        // Previous processImage implementation remains exactly the same
+
+        const ledArray = [];
+        const preambleByte = 231;
+
+        ctx.arc(xCenter, yCenter, 20, 0, Math.PI);
+        ctx2.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, width, height);
+
+        const amp = 2;
+        const bias = 0;
+
+        // const curve = (c) => {
+        //   if (c < 10) return 0;
+        //   const x = (c / 255 - 0.5 + bias) * 2 * amp;
+        //   const absX = Math.abs(x);
+        //   const sign = x > 0 ? 1 : -1;
+        //   const curved = sign * (1 - Math.pow(Math.E, -1 * absX));
+        //   return Math.floor((0.5 + curved / 2) * 255);
+        // };
+
+        ctx.fillRect(0, 0, width, height);
+        ctx2.fillRect(0, 0, width, height);
+        const bufferLen = 60480;
+        const dataArray = [];
+
+        ctx2.drawImage(img, 0, 0, 800, 500);
+        const d = ctx2.getImageData(0, 0, width, height).data;
+
+        for (let i = 35; i < 395; i += refreshRateAngle) {
+          for (
+            let dist = ledMinRadius;
+            dist < ledMinRadius + distBetweenLeds * numLED;
+            dist += distBetweenLeds
+          ) {
+            const x = dist * Math.sin((i * Math.PI) / 180);
+            const y = dist * Math.cos((i * Math.PI) / 180);
+            const pixelNum =
+              (Math.round(y + yCenter) * width + Math.round(xCenter - x)) * 4;
+            const red = gammaCorrect(d[pixelNum], gamma);
+            const green = gammaCorrect(d[pixelNum + 1], gamma);
+            const blue = gammaCorrect(d[pixelNum + 2], gamma);
+            // const sum = blue + green + red;
+            // if (sum > 127) {
+            //   dataArray.push(225);
+            // } else if (sum > 80) {
+            //   dataArray.push(231);
+            // } else {
+            //   dataArray.push(239);
+            // }
+            dataArray.push(225);
+            dataArray.push(blue);
+            dataArray.push(green);
+            dataArray.push(red);
+          }
+        }
+
+        for (
+          let dist = ledMinRadius;
+          dist < ledMinRadius + distBetweenLeds * numLED;
+          dist += distBetweenLeds
+        ) {
+          for (let i = 0; i < 360; i += refreshRateAngle) {
+            const x = dist * Math.sin((i * Math.PI) / 180);
+            const y = dist * Math.cos((i * Math.PI) / 180);
+            const pixelNum =
+              (Math.round(y + yCenter) * width + Math.round(xCenter - x)) * 4;
+            const red = gammaCorrect(d[pixelNum], gamma);
+            const green = gammaCorrect(d[pixelNum + 1], gamma);
+            const blue = gammaCorrect(d[pixelNum + 2], gamma);
+
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = `rgb(${red},${green},${blue})`;
+            ctx.beginPath();
+
+            ctx.arc(
+              xCenter,
+              yCenter,
+              dist,
+              (i * Math.PI) / 180 + Math.PI / 2,
+              (i * Math.PI) / 180 +
+                (refreshRateAngle * Math.PI) / 180 +
+                Math.PI / 2
+            );
+            ctx.stroke();
+          }
+        }
+
+        const buffer = new Uint8Array(dataArray);
+        apiBusy = true;
+        // await simulateProcessing(150);
+        const response = await fetch("http://192.168.4.1/upload", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": buffer.length,
+            Connection: "close",
+          },
+          body: buffer,
+        });
+        const res = await response.text();
+        console.log(res.split("$")[1]);
+
+        apiBusy = false;
+      }
+
+      class VideoProcessor {
+        constructor() {
+          this.isProcessing = false;
+          this.currentTime = 0;
+          this.videoFile = null;
+          this.loopCount = 0;
+          this.isMuted = false;
+
+          // DOM elements
+          this.dropZone = document.getElementById("dropZone");
+          this.video = document.getElementById("video");
+          this.canvas = document.getElementById("canvas");
+          this.videoContainer = document.getElementById("videoContainer");
+          this.startButton = document.getElementById("startButton");
+          this.stopButton = document.getElementById("stopButton");
+          this.currentTimeEl = document.getElementById("currentTime");
+          this.statusTextEl = document.getElementById("statusText");
+          this.frameDisplay = document.getElementById("frameDisplay");
+          this.frameImage = document.getElementById("frameImage");
+          this.loopCountEl = document.getElementById("loopCount");
+          this.gamma = 2.8;
+
+          // New audio control elements
+          this.volumeSlider = document.getElementById("volume");
+          this.gammaSlider = document.getElementById("gamma");
+
+          this.muteButton = document.getElementById("muteButton");
+
+          this.initializeEventListeners();
+          this.initializeAudioControls();
+        }
+
+        initializeAudioControls() {
+          // Volume slider control
+          this.volumeSlider.addEventListener("input", (e) => {
+            const volume = parseFloat(e.target.value);
+            this.video.volume = volume;
+            this.updateMuteButtonIcon();
+          });
+
+          this.gammaSlider.addEventListener("input", (e) => {
+            this.gamma = parseFloat(e.target.value);
+            console.log(this.gamma);
+          });
+
+          // Mute button control
+          this.muteButton.addEventListener("click", () => {
+            this.isMuted = !this.isMuted;
+            this.video.muted = this.isMuted;
+            this.updateMuteButtonIcon();
+          });
+        }
+
+        updateMuteButtonIcon() {
+          if (this.isMuted || this.video.volume === 0) {
+            this.muteButton.textContent = "🔇";
+          } else if (this.video.volume < 0.5) {
+            this.muteButton.textContent = "🔉";
+          } else {
+            this.muteButton.textContent = "🔊";
+          }
+        }
+
+        initializeEventListeners() {
+          // Previous event listeners remain the same
+          this.dropZone.addEventListener(
+            "dragenter",
+            this.handleDragEnter.bind(this)
+          );
+          this.dropZone.addEventListener(
+            "dragover",
+            this.handleDragOver.bind(this)
+          );
+          this.dropZone.addEventListener(
+            "dragleave",
+            this.handleDragLeave.bind(this)
+          );
+          this.dropZone.addEventListener("drop", this.handleDrop.bind(this));
+          this.dropZone.addEventListener("click", () => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "video/*";
+            input.onchange = (e) => this.handleFileSelect(e.target.files[0]);
+            input.click();
+          });
+
+          this.startButton.addEventListener("click", this.start.bind(this));
+          this.stopButton.addEventListener("click", this.stop.bind(this));
+
+          this.video.addEventListener("loadedmetadata", () => {
+            this.startButton.disabled = false;
+          });
+        }
+
+        // Previous methods remain the same
+        handleDragEnter(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.dropZone.classList.add("dragging");
+        }
+
+        handleDragOver(e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+
+        handleDragLeave(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.target === this.dropZone) {
+            this.dropZone.classList.remove("dragging");
+          }
+        }
+
+        handleDrop(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.dropZone.classList.remove("dragging");
+
+          const file = e.dataTransfer.files[0];
+          this.handleFileSelect(file);
+        }
+
+        handleFileSelect(file) {
+          if (file && file.type.startsWith("video/")) {
+            this.videoFile = URL.createObjectURL(file);
+            this.video.src = this.videoFile;
+            this.dropZone.classList.add("has-file");
+            this.videoContainer.classList.remove("hidden");
+            this.updateStatus("Video loaded. Ready to process.");
+
+            // Set initial audio state
+            this.video.volume = parseFloat(this.volumeSlider.value);
+            this.video.muted = this.isMuted;
+            this.updateMuteButtonIcon();
+          } else {
+            this.updateStatus("Please select a valid video file.");
+          }
+        }
+
+        extractFrame() {
+          this.canvas.width = this.video.videoWidth;
+          this.canvas.height = this.video.videoHeight;
+
+          const ctx = this.canvas.getContext("2d");
+          ctx.drawImage(this.video, 0, 0);
+
+          return this.canvas.toDataURL("image/jpeg", 0.95);
+        }
+
+        updateStatus(text) {
+          this.statusTextEl.textContent = text;
+        }
+
+        async start() {
+          if (!this.video || this.isProcessing) return;
+
+          this.isProcessing = true;
+          this.startButton.disabled = true;
+          this.stopButton.disabled = false;
+          this.updateStatus("Processing started...");
+
+          // Start playing the video with audio
+          try {
+            await this.video.play();
+          } catch (error) {
+            console.error("Error playing video:", error);
+          }
+
+          try {
+            while (this.isProcessing) {
+              const frameUrl = this.extractFrame();
+              this.frameDisplay.classList.remove("hidden");
+              this.frameImage.src = frameUrl;
+
+              if (this.frameImage.complete) {
+                if (!apiBusy) {
+                  await processImage(this.frameImage, this.gamma);
+                }
+              } else {
+                // Wait for image to load
+                await new Promise((resolve) => {
+                  this.frameImage.onload = async () => {
+                    if (!apiBusy) {
+                      await processImage(this.frameImage, this.gamma);
+                    }
+                    resolve();
+                  };
+                });
+              }
+
+              // this.currentTime = this.video.currentTime;
+              // this.currentTimeEl.textContent = this.currentTime.toFixed(2);
+
+              const startTime = performance.now();
+              // await simulateProcessing();
+              const processingTime = performance.now() - startTime;
+
+              let nextTime = this.video.currentTime + processingTime / 1000;
+
+              // Check if we need to loop back to the beginning
+              // if (nextTime >= this.video.duration) {
+              //   nextTime = 0;
+              //   this.loopCount++;
+              //   this.loopCountEl.textContent = this.loopCount;
+              //   this.updateStatus(`Starting loop ${this.loopCount + 1}`);
+              // }
+
+              // this.video.currentTime = nextTime;
+
+              // await new Promise((resolve) => {
+              //   const handleSeeked = () => {
+              //     this.video.removeEventListener("seeked", handleSeeked);
+              //     resolve();
+              //   };
+              //   this.video.addEventListener("seeked", handleSeeked);
+              // });
+
+              this.updateStatus(
+                `Processed frame at ${this.currentTime.toFixed(2)}s (Loop ${
+                  this.loopCount + 1
+                })`
+              );
+            }
+          } catch (error) {
+            console.error("Processing error:", error);
+            this.updateStatus(`Error: ${error.message}`);
+          } finally {
+            this.isProcessing = false;
+            this.startButton.disabled = false;
+            this.stopButton.disabled = true;
+            this.video.pause(); // Pause the video when processing stops
+          }
+        }
+
+        stop() {
+          this.isProcessing = false;
+          this.startButton.disabled = false;
+          this.stopButton.disabled = true;
+          this.updateStatus("Processing stopped.");
+          this.video.pause(); // Pause the video when stopping
+        }
+      }
+
+      // Initialize the application
+      document.addEventListener("DOMContentLoaded", () => {
+        new VideoProcessor();
+      });
+    </script>
+  </body>
+</html>
